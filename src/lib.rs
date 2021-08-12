@@ -91,6 +91,17 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
         LogLevel::Info,
     );
 
+    let accepts_gzip = request.headers.get("Accept-Encoding").and_then(|encodings| {
+        for substr in encodings.split(',') {
+            if substr.trim_start().starts_with("gzip") {
+                return Some(());
+            }
+        }
+        None
+    }).is_some();
+
+    println!("accepts gzip: {}", accepts_gzip);
+
     if request.protocol != "HTTP/1.1" || request.method != "GET" {
         bad_request(&mut stream);
         return;
@@ -98,7 +109,7 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
 
     match HttpContent::new(serve_path_str, request.path) {
         Some(content) => match content.get_bytes() {
-            Ok(bytes) => success(&mut stream, &bytes, content.content_headers()),
+            Ok(bytes) => success(&mut stream, &bytes, content.content_headers(), accepts_gzip),
             Err(_) => server_error(&mut stream),
         },
         None => match HttpContent::new(serve_path_str, "404.html") {
@@ -106,7 +117,8 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
                 Ok(bytes) => not_found(
                     &mut stream,
                     &bytes,
-                    content.content_headers()
+                    content.content_headers(),
+                    accepts_gzip
                 ),
                 Err(_) => server_error(&mut stream),
             },
@@ -118,7 +130,8 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
 fn server_error(stream: &mut TcpStream) {
     let content_headers = ContentHeaders {
         content_type: "text/plain",
-        cache_age: 0
+        cache_age: 0,
+        compress: false
     };
     respond(
         stream,
@@ -132,20 +145,28 @@ fn bad_request(stream: &mut TcpStream) {
     respond(stream, b"", None, HttpStatus::BadRequest);
 }
 
-fn success(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders) {
-    respond(stream, bytebuffer, Some(content_headers), HttpStatus::Ok);
+fn success(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders, allow_compression: bool) {
+    let mut headers = ContentHeaders {..content_headers};
+    headers.compress = content_headers.compress && allow_compression;
+    respond(stream, bytebuffer, Some(headers), HttpStatus::Ok);
 }
 
-fn not_found(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders) {
-    respond(stream, bytebuffer, Some(content_headers), HttpStatus::NotFound);
+fn not_found(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders, allow_compression: bool) {
+    let mut headers = ContentHeaders {..content_headers};
+    headers.compress = content_headers.compress && allow_compression;
+    respond(stream, bytebuffer, Some(headers), HttpStatus::NotFound);
 }
 
 fn respond(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: Option<ContentHeaders>, status: HttpStatus) {
-    let mut response = Response::new(status, bytebuffer);
+    let bytes = bytebuffer.to_vec();
+    let mut response = Response::new(status, bytes);
 
     response.set_default_headers();
     if let Some(headers) = content_headers {
         response.set_content_headers(&headers);
+        if headers.compress && response.compress_gzip().is_err() {
+            log("Could not compress file", LogLevel::ServerError);
+        }
     }
 
     let result = response.send(stream);

@@ -3,6 +3,8 @@ use crate::server::ContentHeaders;
 use std::net::TcpStream;
 use std::io::Write;
 use std::collections::HashMap;
+use flate2::{write::GzEncoder, Compression};
+use std::io::Result;
 
 pub enum HttpStatus {
     Ok,
@@ -15,11 +17,11 @@ pub struct Response<'a> {
     pub status: HttpStatus,
     pub protocol: String,
     pub headers: HashMap<&'a str, String>,
-    pub payload: &'a [u8]
+    pub payload: Vec<u8>
 }
 
 impl<'a> Response<'a> {
-    pub fn new(status: HttpStatus, payload: &'a [u8]) -> Self {
+    pub fn new(status: HttpStatus, payload: Vec<u8>) -> Self {
         Response {
             status,
             protocol: String::from("HTTP/1.1"),
@@ -64,7 +66,17 @@ impl<'a> Response<'a> {
         self.headers.insert("Cache-Control", cache_control);
     }
 
-    pub fn send(&self, stream: &mut TcpStream) -> Result<(), std::io::Error> {
+    pub fn compress_gzip(&mut self) -> Result<()> {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&self.payload)?;
+        self.payload = encoder.finish()?;
+
+        self.headers.insert("Content-Encoding", "gzip".to_string());
+        self.headers.insert("Vary", "Accept-Encoding".to_string());
+        Ok(())
+    }
+
+    pub fn send(&self, stream: &mut TcpStream) -> Result<()> {
         stream.write(&self.headers_to_string().as_bytes())?;
         stream.write(&self.payload)?;
         stream.flush()?;

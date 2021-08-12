@@ -38,33 +38,35 @@ impl HttpContent {
         let hour = 3600;
         let day = 86400;
 
-        let (ctype, age) = match ext {
-            "html" => ("text/html; charset=UTF-8", min),
-            "css" => ("text/css; charset=UTF-8", 3 * day),
-            "js" => ("text/javascript; charset=UTF-8", 3 * day),
-            "txt" => ("text/plain; charset=UTF-8", min),
-            "json" => ("application/json; charset=UTF-8", hour),
-            "svg" => ("image/svg+xml; charset=UTF-8", 7 * day),
-            "webp" => ("image/webp", 3 * day),
-            "jpg" | "jpeg" => ("image/jpeg", 3 * day),
-            "ico" => ("image/x-icon", 7 * day),
-            "png" => ("image/png", 3 * day),
-            "otf" => ("font/otf", 7 * day),
-            "ttf" => ("font/ttf", 7 * day),
-            "mp4" => ("video/mp4", day),
-            "mp3" => ("audio/mp3", day),
-            _ => ("application/octet-stream", min),
+        let (ctype, age, use_gzip) = match ext {
+            "html" => ("text/html; charset=UTF-8", min, true),
+            "css" => ("text/css; charset=UTF-8", 3 * day, true),
+            "js" => ("text/javascript; charset=UTF-8", 3 * day, true),
+            "txt" => ("text/plain; charset=UTF-8", min, true),
+            "json" => ("application/json; charset=UTF-8", hour, true),
+            "svg" => ("image/svg+xml; charset=UTF-8", 7 * day, true),
+            "webp" => ("image/webp", 3 * day, false),
+            "jpg" | "jpeg" => ("image/jpeg", 3 * day, false),
+            "ico" => ("image/x-icon", 7 * day, false),
+            "png" => ("image/png", 3 * day, false),
+            "otf" => ("font/otf", 7 * day, true),
+            "ttf" => ("font/ttf", 7 * day, true),
+            "mp4" => ("video/mp4", day, false),
+            "mp3" => ("audio/mp3", day, false),
+            _ => ("application/octet-stream", min, false),
         };
         ContentHeaders {
             content_type: ctype,
-            cache_age: age
+            cache_age: age,
+            compress: use_gzip
         }
     }
 }
 
 pub struct ContentHeaders<'a> {
     pub content_type: &'a str,
-    pub cache_age: u32
+    pub cache_age: u32,
+    pub compress: bool
 }
 
 fn resolve_file_path(path: String) -> Option<String> {
