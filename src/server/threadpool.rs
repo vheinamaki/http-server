@@ -2,6 +2,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use crate::{log, LogLevel};
 
+/// Threadpool for handling multiple HTTP requests simultaneously
 pub struct ThreadPool {
     workers: Vec<Worker>,
     sender: mpsc::Sender<Message>,
@@ -9,6 +10,10 @@ pub struct ThreadPool {
 
 impl ThreadPool {
 
+    /// Returns a new `Threadpool` instance.
+    ///
+    /// # Arguments
+    /// * `max_threads` - the amount of worker threads in the pool
     pub fn new(max_threads: usize) -> ThreadPool {
         assert!(max_threads > 0);
 
@@ -25,6 +30,10 @@ impl ThreadPool {
         ThreadPool { workers, sender }
     }
 
+    /// Queue a new job to execute.
+    ///
+    /// # Arguments
+    /// * `f` - The job to execute when a thread is available
     pub fn execute<F>(&self, f: F)
     where
         F: FnOnce() + Send + 'static,

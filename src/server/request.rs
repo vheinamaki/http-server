@@ -1,5 +1,11 @@
 use std::collections::HashMap;
 
+/// A parsed HTTP Request
+///
+/// * `method` - The HTTP method used in the request
+/// * `path` - The requested resource path
+/// * `protocol` - The used HTTP protocol version
+/// * `headers` - A key-value table containing the request's headers
 pub struct Request<'a> {
     pub method: &'a str,
     pub path: &'a str,
@@ -8,6 +14,11 @@ pub struct Request<'a> {
 }
 
 impl Request<'_> {
+    /// Returns a request object for the given HTTP/1.1 request string.
+    /// Returns `None` if the string doesn't contain a valid request.
+    ///
+    /// # Arguments
+    /// * `req` - The request string to parse
     pub fn parse(req: &str) -> Option<Request> {
         let request_line: Vec<&str> = req.splitn(3, ' ').collect();
 

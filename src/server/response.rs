@@ -13,6 +13,7 @@ pub enum HttpStatus {
     ServerError,
 }
 
+/// Struct representing a HTTP Response
 pub struct Response<'a> {
     pub status: HttpStatus,
     pub protocol: String,
@@ -21,6 +22,11 @@ pub struct Response<'a> {
 }
 
 impl<'a> Response<'a> {
+    /// Returns a new HTTP/1.1 response with the given status, payload and empty headers.
+    ///
+    /// # Arguments
+    /// * `status` - The response's HTTP status code
+    /// * `payload` - The response's data
     pub fn new(status: HttpStatus, payload: Vec<u8>) -> Self {
         Response {
             status,
@@ -50,6 +56,7 @@ impl<'a> Response<'a> {
         result
     }
 
+    /// Add common headers to the response.
     pub fn set_default_headers(&mut self) {
         let length = self.payload.len().to_string();
         let time = Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
@@ -59,6 +66,7 @@ impl<'a> Response<'a> {
         self.headers.insert("Permissions-Policy", "interest-cohort=()".to_string());
     }
 
+    /// Add content type specific headers to the response.
     pub fn set_content_headers(&mut self, headers: &ContentHeaders) {
         let cache_control = format!("max-age={}", headers.cache_age);
 
@@ -66,6 +74,7 @@ impl<'a> Response<'a> {
         self.headers.insert("Cache-Control", cache_control);
     }
 
+    /// Compress the response payload using gzip, and set the correct encoding headers.
     pub fn compress_gzip(&mut self) -> Result<()> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(&self.payload)?;
@@ -76,6 +85,7 @@ impl<'a> Response<'a> {
         Ok(())
     }
 
+    /// Write the response to the given `TcpStream`.
     pub fn send(&self, stream: &mut TcpStream) -> Result<()> {
         stream.write(&self.headers_to_string().as_bytes())?;
         stream.write(&self.payload)?;

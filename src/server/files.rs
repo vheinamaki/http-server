@@ -3,11 +3,20 @@ use std::io::Read;
 use std::io::Result;
 use std::path::Path;
 
+/// Represents a file in the served folder
 pub struct HttpContent {
     file_path: String,
 }
 
 impl HttpContent {
+
+    /// Returns a new HttpContent instance for the given folder and file path.
+    /// Returns `None` if the file does not exist in the served folder.
+    ///
+    /// # Arguments
+    ///
+    /// * `serve_path` - The served folder
+    /// * `content_path` - Path of the requested file, relative to `serve_path`
     pub fn new(serve_path: &str, content_path: &str) -> Option<Self> {
         let content_path = content_path.strip_prefix(&['/', '\\'][..]).unwrap_or(content_path);
         let combined_path = format!("{}/{}", serve_path, content_path);
@@ -19,6 +28,8 @@ impl HttpContent {
         }
     }
 
+    /// Returns the file's contents as a byte vector.
+    /// Returns `io::Error` if the file could not be read.
     pub fn get_bytes(&self) -> Result<Vec<u8>> {
         let mut file = File::open(Path::new(&self.file_path))?;
         let mut buffer = Vec::<u8>::new();
@@ -26,6 +37,7 @@ impl HttpContent {
         Ok(buffer)
     }
 
+    /// Return the content type specific response headers for the file.
     pub fn content_headers(&self) -> ContentHeaders {
         let ext = match Path::new(&self.file_path).extension() {
             Some(x) => match x.to_str() {
@@ -63,6 +75,10 @@ impl HttpContent {
     }
 }
 
+/// Struct representing a file's content type specific response headers.
+/// * `content_type` - The file's Content-Type header value
+/// * `cache_age` - The file's Cache-Control: max-age value
+/// * `compress` - Whether the file should be compressed with gzip
 pub struct ContentHeaders<'a> {
     pub content_type: &'a str,
     pub cache_age: u32,
