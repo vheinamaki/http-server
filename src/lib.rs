@@ -32,7 +32,7 @@ pub fn run(config: Arguments) {
         &format!("Starting server on port {}", config.port),
         LogLevel::Info,
     );
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", config.port)).unwrap();
     let pool = ThreadPool::new(4);
 
     let config = Arc::new(config);
