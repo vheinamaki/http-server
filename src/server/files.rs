@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Result;
 use std::path::Path;
+use urlencoding::decode;
 
 /// Represents a file in the served folder
 pub struct HttpContent {
@@ -86,7 +87,7 @@ pub struct ContentHeaders<'a> {
 }
 
 fn resolve_file_path(path: String) -> Option<String> {
-    let mut validated = String::from(path);
+    let mut validated = String::from(decode(&path).ok()?);
     let path = Path::new(&validated);
     if path.is_file() {
         return Some(validated);
