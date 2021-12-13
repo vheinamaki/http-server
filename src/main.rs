@@ -1,21 +1,35 @@
+use clap::{value_t, App, Arg};
 use http_server::Arguments;
-use std::env;
-use std::option::Option;
-use std::process;
-
-fn collect_args(args: &Vec<String>) -> Option<Arguments> {
-    let directory = args.get(1)?.to_string();
-    let port: u32 = args.get(2).unwrap_or(&String::from("80")).parse().ok()?;
-    Some(Arguments { directory, port })
-}
 
 fn main() {
-    let args = env::args().collect();
+    let args = App::new("http-server")
+        .version("0.1.0")
+        .arg(
+            Arg::with_name("DIRECTORY")
+                .help("The directory to serve. Should contain an index.html at minimum")
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("port")
+                .short("p")
+                .long("port")
+                .help("Port to run the server on")
+                .default_value("80"),
+        )
+        .arg(
+            Arg::with_name("threads")
+                .short("t")
+                .long("threads")
+                .help("Number of threads to allocate for request handling")
+                .default_value("2"),
+        )
+        .get_matches();
 
-    let config = collect_args(&args).unwrap_or_else(|| {
-        println!("Usage: {} directory [port-number]", args[0]);
-        process::exit(1);
-    });
-
+    let config = Arguments {
+        directory: String::from(args.value_of("DIRECTORY").unwrap()),
+        port: value_t!(args.value_of("port"), u16).unwrap_or_else(|e| e.exit()),
+        threads: value_t!(args.value_of("port"), usize).unwrap_or_else(|e| e.exit()),
+    };
     http_server::run(config);
 }

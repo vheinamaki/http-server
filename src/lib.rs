@@ -9,7 +9,8 @@ use server::{ThreadPool, Request, Response, HttpContent, HttpStatus, ContentHead
 
 pub struct Arguments {
     pub directory: String,
-    pub port: u32,
+    pub port: u16,
+    pub threads: usize,
 }
 
 pub enum LogLevel {
@@ -33,7 +34,7 @@ pub fn run(config: Arguments) {
         LogLevel::Info,
     );
     let listener = TcpListener::bind(format!("0.0.0.0:{}", config.port)).unwrap();
-    let pool = ThreadPool::new(4);
+    let pool = ThreadPool::new(config.threads);
 
     let config = Arc::new(config);
 
