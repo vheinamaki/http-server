@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub mod server;
 
-use server::{ThreadPool, Request, Response, HttpContent, HttpStatus, ContentHeaders};
+use server::{ContentHeaders, HttpContent, HttpStatus, Request, Response, ThreadPool};
 
 pub struct Arguments {
     pub directory: String,
@@ -94,21 +94,29 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
         LogLevel::Info,
     );
 
-    let accepts_gzip = request.headers.get("Accept-Encoding").and_then(|encodings| {
-        for substr in encodings.split(',') {
-            if substr.trim_start().starts_with("gzip") {
-                return Some(());
+    let accepts_gzip = request
+        .headers
+        .get("Accept-Encoding")
+        .and_then(|encodings| {
+            for substr in encodings.split(',') {
+                if substr.trim_start().starts_with("gzip") {
+                    return Some(());
+                }
             }
-        }
-        None
-    }).is_some();
+            None
+        })
+        .is_some();
 
     if request.protocol != "HTTP/1.1" {
         empty_response(&mut stream, HttpStatus::UnsupportedVersion);
         return;
     }
 
-    let send_body = if request.method != "HEAD" {true} else {false};
+    let send_body = if request.method != "HEAD" {
+        true
+    } else {
+        false
+    };
 
     if request.method != "GET" && request.method != "HEAD" {
         empty_response(&mut stream, HttpStatus::NotAllowed);
@@ -117,55 +125,93 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
 
     match HttpContent::new(serve_path_str, request.path) {
         Some(content) => match content.get_bytes() {
-            Ok(bytes) => success(&mut stream, if send_body {&bytes} else {b""}, content.content_headers(), accepts_gzip),
-            Err(_) => server_error(&mut stream),
+            Ok(bytes) => success(
+                &mut stream,
+                &bytes,
+                content.content_headers(),
+                accepts_gzip,
+                send_body,
+            ),
+            Err(_) => server_error(&mut stream, send_body),
         },
         None => match HttpContent::new(serve_path_str, "404.html") {
             Some(content) => match content.get_bytes() {
                 Ok(bytes) => not_found(
                     &mut stream,
-                    if send_body {&bytes} else {b""},
+                    &bytes,
                     content.content_headers(),
-                    accepts_gzip
+                    accepts_gzip,
+                    send_body,
                 ),
-                Err(_) => server_error(&mut stream),
+                Err(_) => server_error(&mut stream, send_body),
             },
-            None => server_error(&mut stream),
+            None => server_error(&mut stream, send_body),
         },
     }
 }
 
-fn server_error(stream: &mut TcpStream) {
+fn server_error(stream: &mut TcpStream, include_body: bool) {
     let content_headers = ContentHeaders {
         content_type: "text/plain",
         cache_age: 0,
-        compress: false
+        compress: false,
     };
     respond(
         stream,
         b"500 Internal Server Error",
         Some(content_headers),
         HttpStatus::ServerError,
+        include_body,
     );
 }
 
 fn empty_response(stream: &mut TcpStream, status: HttpStatus) {
-    respond(stream, b"", None, status);
+    respond(stream, b"", None, status, false);
 }
 
-fn success(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders, allow_compression: bool) {
-    let mut headers = ContentHeaders {..content_headers};
+fn success(
+    stream: &mut TcpStream,
+    bytebuffer: &[u8],
+    content_headers: ContentHeaders,
+    allow_compression: bool,
+    include_body: bool,
+) {
+    let mut headers = ContentHeaders { ..content_headers };
     headers.compress = content_headers.compress && allow_compression;
-    respond(stream, bytebuffer, Some(headers), HttpStatus::Ok);
+    respond(
+        stream,
+        bytebuffer,
+        Some(headers),
+        HttpStatus::Ok,
+        include_body,
+    );
 }
 
-fn not_found(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders, allow_compression: bool) {
-    let mut headers = ContentHeaders {..content_headers};
+fn not_found(
+    stream: &mut TcpStream,
+    bytebuffer: &[u8],
+    content_headers: ContentHeaders,
+    allow_compression: bool,
+    include_body: bool,
+) {
+    let mut headers = ContentHeaders { ..content_headers };
     headers.compress = content_headers.compress && allow_compression;
-    respond(stream, bytebuffer, Some(headers), HttpStatus::NotFound);
+    respond(
+        stream,
+        bytebuffer,
+        Some(headers),
+        HttpStatus::NotFound,
+        include_body,
+    );
 }
 
-fn respond(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: Option<ContentHeaders>, status: HttpStatus) {
+fn respond(
+    stream: &mut TcpStream,
+    bytebuffer: &[u8],
+    content_headers: Option<ContentHeaders>,
+    status: HttpStatus,
+    include_body: bool,
+) {
     let bytes = bytebuffer.to_vec();
     let mut response = Response::new(status, bytes);
 
@@ -177,7 +223,7 @@ fn respond(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: Option<Co
         }
     }
 
-    let result = response.send(stream);
+    let result = response.send(stream, include_body);
 
     if let Err(e) = result {
         log(

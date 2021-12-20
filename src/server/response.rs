@@ -100,9 +100,11 @@ impl<'a> Response<'a> {
     }
 
     /// Write the response to the given `TcpStream`.
-    pub fn send(&self, stream: &mut TcpStream) -> Result<()> {
-        stream.write(&self.headers_to_string().as_bytes())?;
-        stream.write_all(&self.payload)?;
+    pub fn send(&self, stream: &mut TcpStream, include_body: bool) -> Result<()> {
+        stream.write_all(&self.headers_to_string().as_bytes())?;
+        if include_body {
+            stream.write_all(&self.payload)?;
+        }
         stream.flush()?;
         Ok(())
     }
