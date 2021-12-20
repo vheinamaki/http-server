@@ -29,7 +29,7 @@ fn main() {
     let config = Arguments {
         directory: String::from(args.value_of("DIRECTORY").unwrap()),
         port: value_t!(args.value_of("port"), u16).unwrap_or_else(|e| e.exit()),
-        threads: value_t!(args.value_of("port"), usize).unwrap_or_else(|e| e.exit()),
+        threads: value_t!(args.value_of("threads"), usize).unwrap_or_else(|e| e.exit()),
     };
     http_server::run(config);
 }

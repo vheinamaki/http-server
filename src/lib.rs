@@ -57,6 +57,7 @@ pub fn run(config: Arguments) {
 }
 
 fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
+    // Read max 1KB of request data
     let mut buffer = [0; 1024];
 
     if stream.read(&mut buffer).is_err() {
@@ -64,6 +65,7 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
             &format!("Client sent malformed stream"),
             LogLevel::ClientError,
         );
+        empty_response(&mut stream, HttpStatus::BadRequest);
         return;
     }
 
@@ -73,7 +75,7 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
     let request = match Request::parse(&buffer_str) {
         Some(x) => x,
         None => {
-            bad_request(&mut stream);
+            empty_response(&mut stream, HttpStatus::BadRequest);
             return;
         }
     };
@@ -101,23 +103,28 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Arguments>) {
         None
     }).is_some();
 
-    println!("accepts gzip: {}", accepts_gzip);
+    if request.protocol != "HTTP/1.1" {
+        empty_response(&mut stream, HttpStatus::UnsupportedVersion);
+        return;
+    }
 
-    if request.protocol != "HTTP/1.1" || request.method != "GET" {
-        bad_request(&mut stream);
+    let send_body = if request.method != "HEAD" {true} else {false};
+
+    if request.method != "GET" && request.method != "HEAD" {
+        empty_response(&mut stream, HttpStatus::NotAllowed);
         return;
     }
 
     match HttpContent::new(serve_path_str, request.path) {
         Some(content) => match content.get_bytes() {
-            Ok(bytes) => success(&mut stream, &bytes, content.content_headers(), accepts_gzip),
+            Ok(bytes) => success(&mut stream, if send_body {&bytes} else {b""}, content.content_headers(), accepts_gzip),
             Err(_) => server_error(&mut stream),
         },
         None => match HttpContent::new(serve_path_str, "404.html") {
             Some(content) => match content.get_bytes() {
                 Ok(bytes) => not_found(
                     &mut stream,
-                    &bytes,
+                    if send_body {&bytes} else {b""},
                     content.content_headers(),
                     accepts_gzip
                 ),
@@ -142,8 +149,8 @@ fn server_error(stream: &mut TcpStream) {
     );
 }
 
-fn bad_request(stream: &mut TcpStream) {
-    respond(stream, b"", None, HttpStatus::BadRequest);
+fn empty_response(stream: &mut TcpStream, status: HttpStatus) {
+    respond(stream, b"", None, status);
 }
 
 fn success(stream: &mut TcpStream, bytebuffer: &[u8], content_headers: ContentHeaders, allow_compression: bool) {
